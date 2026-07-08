@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <record id="view_laundry_configuration_form_package_inherit" model="ir.ui.view">
+        <field name="name">laundry.configuration.form.package.inherit</field>
+        <field name="model">laundry.configuration</field>
+        <field name="inherit_id" ref="pos_laundry.view_laundry_configuration_form"/>
+        <field name="arch" type="xml">
+
+        <xpath expr="//page[@string='General']/group" position="inside">
+                <field name="package_pos_category_id"/>
+            </xpath>
+
+            <xpath expr="//page[@string='Payments']/group/field[@name='paid_payment_id']" position="after">
+                <field name="package_payment_id"/>
+            </xpath>
+
+        </field>
+    </record>    
+</odoo>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- form View -->
+    <record id="view_laundry_order_type_form_package_inherit" model="ir.ui.view">
+        <field name="name">laundry.order.type.form.package.inherit</field>
+        <field name="model">laundry.order.type</field>
+        <field name="inherit_id" ref="pos_laundry.view_laundry_order_type_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='direct_sale']" position="after">
+                <field name="is_package_sale"/>
+                <field name="is_package_use"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,190 @@
+/** @odoo-module **/
+
+import { _t } from "@web/core/l10n/translation";
+import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
+import { laundryService } from "@pos_laundry/app/services/laundry_service";
+
+const originalStart = laundryService.start;
+
+function uniqueIds(ids = []) {
+    return [...new Set((ids || []).filter(Boolean))];
+}
+
+function getPackageRuleId(pkg) {
+    return pkg.package_rule_id?.[0] || pkg.package_rule_id || false;
+}
+
+function getPackageRuleName(pkg) {
+    return pkg.package_rule_name || pkg.package_rule_id?.[1] || "";
+}
+
+function normalizePackageDetails(pkg) {
+    return pkg.details || pkg.package_details || [];
+}
+
+function getAllowedPackageProducts(pkg) {
+    const details = normalizePackageDetails(pkg);
+    if (details.length) {
+        return uniqueIds(details.flatMap((detail) => detail.product_ids || []));
+    }
+    return uniqueIds(pkg.allowed_product_ids || pkg.allowed_package_products || []);
+}
+
+function getAllowedPackageCategories(pkg) {
+    const details = normalizePackageDetails(pkg);
+    if (details.length) {
+        return uniqueIds(details.map((detail) => detail.category_id).filter(Boolean));
+    }
+    return uniqueIds(pkg.allowed_category_ids || pkg.allowed_package_categories || []);
+}
+
+laundryService.start = function (env, deps) {
+    const service = originalStart.call(this, env, deps);
+
+    const originalGetVisibleOrderTypeFields = service.getVisibleOrderTypeFields.bind(service);
+    service.getVisibleOrderTypeFields = function () {
+        return uniqueIds([
+            ...originalGetVisibleOrderTypeFields(),
+            "is_package_sale",
+            "is_package_use",
+        ]);
+    };
+
+    const originalAfterSetLaundryOrderState = service._afterSetLaundryOrderState.bind(service);
+    service._afterSetLaundryOrderState = function (order, values = {}) {
+        originalAfterSetLaundryOrderState(order, values);
+        order.uiState.is_package_sale = Boolean(values.is_package_sale);
+        order.uiState.is_package_usage = Boolean(values.is_package_usage);
+        order.uiState.partner_package_id = values.partner_package_id || false;
+        order.uiState.package_rule_id = values.package_rule_id || false;
+        order.uiState.package_rule_name = values.package_rule_name || "";
+        order.uiState.allowed_package_products = values.allowed_package_products || [];
+        order.uiState.allowed_package_categories = values.allowed_package_categories || [];
+        order.uiState.package_details = values.package_details || [];
+    };
+
+    const originalPrepareOrderTypeState = service._prepareOrderTypeState.bind(service);
+    service._prepareOrderTypeState = function (orderType) {
+        const values = originalPrepareOrderTypeState(orderType);
+        values.is_package_sale = Boolean(orderType.is_package_sale);
+        values.is_package_usage = Boolean(orderType.is_package_use);
+        return values;
+    };
+
+    service.isPackageSale = function () {
+        const order = this.getOrder();
+        return Boolean(order?.uiState?.is_package_sale);
+    };
+
+    service.isPackageUsage = function () {
+        const order = this.getOrder();
+        return Boolean(order?.uiState?.is_package_usage);
+    };
+
+    service.getCurrentPackageId = function () {
+        const order = this.getOrder();
+        return order?.uiState?.partner_package_id || false;
+    };
+
+    service.getActivePackages = async function (partnerId) {
+        if (!partnerId) {
+            return [];
+        }
+        return await this.orm.call("partner.package", "get_active_packages_for_pos", [partnerId]);
+    };
+
+    service.getPackageUsageOrderType = async function () {
+        const types = await this.orm.searchRead(
+            "laundry.order.type",
+            [["active", "=", true], ["is_hidden", "=", false], ["is_package_use", "=", true]],
+            this.getVisibleOrderTypeFields()
+        );
+        return types.length ? types[0] : false;
+    };
+
+    service.selectPackage = async function (pkg, customer = null) {
+        const orderType = await this.getPackageUsageOrderType();
+        if (!orderType) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Package Usage Order Type Missing"),
+                body: _t("Please configure one active order type with Package Usage enabled."),
+            });
+            return;
+        }
+
+        const order = await this.createFreshOrder(customer);
+        if (!order) {
+            return;
+        }
+
+        const allowedProducts = getAllowedPackageProducts(pkg);
+        const allowedCategories = getAllowedPackageCategories(pkg);
+
+        this._setLaundryOrderState(order, {
+            laundry_order_type_id: orderType.id,
+            laundry_order_type_name: orderType.name || _t("Package Usage"),
+            laundry_order_type_prefix: orderType.prefix || "",
+            allowed_category_ids: allowedCategories.length ? allowedCategories : this._normalizeCategoryIds(orderType.pos_category_ids || []),
+            is_package_sale: false,
+            is_package_usage: true,
+            partner_package_id: pkg.id,
+            package_rule_id: getPackageRuleId(pkg),
+            package_rule_name: getPackageRuleName(pkg),
+            allowed_package_products: allowedProducts,
+            allowed_package_categories: allowedCategories,
+            package_details: normalizePackageDetails(pkg),
+        });
+
+        this.pos.selected_laundry_order_type = orderType;
+        this.pos.selected_partner_package = pkg;
+        this.pos.navigate("ProductScreen", { orderUuid: order.uuid });
+    };
+
+    const originalValidateLaundryOrderData = service._validateLaundryOrderData.bind(service);
+    service._validateLaundryOrderData = function (order, partner, lines) {
+        originalValidateLaundryOrderData(order, partner, lines);
+        if (order.uiState?.is_package_usage && !order.uiState?.partner_package_id) {
+            throw new Error(_t("Please select an active customer package."));
+        }
+    };
+
+    const originalExtendLaundryOrderData = service._extendLaundryOrderData.bind(service);
+    service._extendLaundryOrderData = function (data, order) {
+        data = originalExtendLaundryOrderData(data, order);
+        data.package_rule_id = order.uiState?.package_rule_id || false;
+        data.partner_package_id = order.uiState?.partner_package_id || false;
+        data.is_package_sale = Boolean(order.uiState?.is_package_sale);
+        data.is_package_usage = Boolean(order.uiState?.is_package_usage);
+        return data;
+    };
+
+    const originalPrepareSavedStateValues = service._prepareSavedStateValues.bind(service);
+    service._prepareSavedStateValues = function (result, order) {
+        const values = originalPrepareSavedStateValues(result, order);
+        values.is_package_sale = order.uiState.is_package_sale;
+        values.is_package_usage = order.uiState.is_package_usage;
+        values.partner_package_id = result.partner_package_id || order.uiState.partner_package_id;
+        values.package_rule_id = order.uiState.package_rule_id;
+        values.package_rule_name = order.uiState.package_rule_name;
+        values.allowed_package_products = order.uiState.allowed_package_products || [];
+        values.allowed_package_categories = order.uiState.allowed_package_categories || [];
+        values.package_details = order.uiState.package_details || [];
+        return values;
+    };
+
+    const originalPrepareOpenOrderStateValues = service._prepareOpenOrderStateValues.bind(service);
+    service._prepareOpenOrderStateValues = function (data) {
+        const values = originalPrepareOpenOrderStateValues(data);
+        values.is_package_sale = Boolean(data.is_package_sale);
+        values.is_package_usage = Boolean(data.is_package || data.is_package_usage);
+        values.partner_package_id = data.partner_package_id || false;
+        values.package_rule_id = data.package_rule_id || false;
+        values.package_rule_name = data.package_rule_name || "";
+        values.allowed_package_products = data.allowed_package_products || [];
+        values.allowed_package_categories = data.allowed_package_categories || [];
+        values.package_details = data.package_details || [];
+        return values;
+    };
+
+    return service;
+};
