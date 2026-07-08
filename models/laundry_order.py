@@ -265,6 +265,38 @@ class LaundryOrder(models.Model):
             ("laundry_order_id", "=", order.id),
         ], limit=1)
 
+        partner_package = usage_line.partner_package_id if usage_line else False
+
+        allowed_product_ids = []
+        allowed_category_ids = []
+        package_details = []
+
+        if partner_package:
+            for detail in partner_package.package_rule_id.detail_ids:
+                product_ids = detail.product_ids.ids
+                category = detail.pos_category_id
+
+                allowed_product_ids.extend(product_ids)
+
+                if category:
+                    allowed_category_ids.append(category.id)
+
+                usage_lines = partner_package.usage_history_ids.filtered(
+                    lambda line: line.package_rule_detail_id.id == detail.id
+                )
+
+                used_qty = sum(usage_lines.mapped("qty"))
+                remaining_qty = detail.qty - used_qty
+
+                package_details.append({
+                    "category_id": category.id if category else False,
+                    "category_name": category.name if category else "",
+                    "product_ids": product_ids,
+                    "allowed_qty": detail.qty,
+                    "used_qty": used_qty,
+                    "remaining_qty": max(remaining_qty, 0),
+                })
+
         data.update({
             "is_package": bool(order.is_package),
             "is_package_usage": bool(order.is_package),
@@ -272,6 +304,11 @@ class LaundryOrder(models.Model):
             "is_package_use": bool(order.order_type_id.is_package_use),
             "package_rule_id": order.package_rule_id.id if order.package_rule_id else False,
             "package_rule_name": order.package_rule_id.name if order.package_rule_id else "",
-            "partner_package_id": usage_line.partner_package_id.id if usage_line else False,
+            "partner_package_id": partner_package.id if partner_package else False,
+
+            "allowed_package_products": list(set(allowed_product_ids)),
+            "laundry_allowed_pos_category_ids": list(set(allowed_category_ids)),
+            "package_details": package_details,
         })
+
         return data

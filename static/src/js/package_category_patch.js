@@ -56,10 +56,7 @@ patch(CategorySelector.prototype, {
                     product.pos_categ_ids?.map((c) => c.id || c) || [];
 
                 if (isPackageUsage && packageAllowedProducts.length) {
-                    const liveAllowedProducts =
-                        this.pos.packageAllowedProductIds || [];
-
-                    return liveAllowedProducts.includes(product.id);
+                    return packageAllowedProducts.includes(product.id);
                 }
 
                 if (orderTypeAllowedCategories.length) {

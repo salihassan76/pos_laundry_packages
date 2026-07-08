@@ -31,8 +31,9 @@ Adds package functionality on top of POS Laundry:
     ],
     "assets": {
         "point_of_sale._assets_pos": [
-            "pos_laundry_packages/static/src/js/package_category_patch.js",
             "pos_laundry_packages/static/src/js/package_engine.js",
+            "pos_laundry_packages/static/src/js/package_store_patch.js",
+            "pos_laundry_packages/static/src/js/package_category_patch.js",
             "pos_laundry_packages/static/src/js/package_order_patch.js",
             "pos_laundry_packages/static/src/js/package_product_patch.js",
             "pos_laundry_packages/static/src/js/package_service_patch.js",
