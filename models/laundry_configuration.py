@@ -4,6 +4,11 @@ from odoo.exceptions import UserError
 
 class LaundryConfiguration(models.Model):
     _inherit = "laundry.configuration"
+
+    enable_laundry_packages = fields.Boolean(
+        string="Enable Packages",
+        default=True,
+    )
     
     package_pos_category_id = fields.Many2one(
         "pos.category",
@@ -22,6 +27,7 @@ class LaundryConfiguration(models.Model):
         package_fields = [
             "package_pos_category_id",
             "package_payment_id",
+            "enable_laundry_packages",
         ]
 
         for record in data:

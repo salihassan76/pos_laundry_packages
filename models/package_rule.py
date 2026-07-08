@@ -1,4 +1,4 @@
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
 
@@ -19,6 +19,15 @@ class PackageRule(models.Model):
     usage_count = fields.Integer(string="Usage Count",compute="_compute_usage_count")
     is_locked = fields.Boolean(string="Locked",compute="_compute_usage_count")
     active = fields.Boolean(default=True)
+    pos_config_ids = fields.Many2many(
+        "pos.config",
+        "package_rule_pos_config_rel",
+        "package_rule_id",
+        "pos_config_id",
+        string="Allowed POS",
+        domain=[("enable_laundry_packages", "=", True)],
+    )
+  
 
 
     @api.depends("detail_ids.value")
@@ -50,28 +59,26 @@ class PackageRule(models.Model):
         
     def action_create_package_product(self):
         for rec in self:
-            pos_config_id = self.env.context.get("pos_config_id")
-
-            if not pos_config_id:
-                raise ValidationError("Please open package rules from a POS configuration.")
-
-            pos_config = self.env["pos.config"].browse(pos_config_id)
-
-            if not pos_config.exists():
-                raise ValidationError("POS configuration was not found.")
-
-            if not pos_config.package_pos_category_id:
-                raise ValidationError("Package POS Category is not configured.")
-
             if rec.product_id:
                 raise ValidationError("Package product already exists.")
+
+            if not rec.pos_config_ids:
+                raise ValidationError("Please select at least one Allowed POS.")
+
+            package_categories = rec.pos_config_ids.mapped("package_pos_category_id")
+
+            if not package_categories:
+                raise ValidationError("Package POS Category is not configured on the selected POS.")
+
+            if len(package_categories) > 1:
+                raise ValidationError("Selected POS configs must use the same Package POS Category.")
 
             product = self.env["product.template"].create({
                 "name": rec.name,
                 "type": "service",
                 "available_in_pos": True,
                 "list_price": rec.package_amount,
-                "pos_categ_ids": [(6, 0, [pos_config.package_pos_category_id.id])],
+                "pos_categ_ids": [(6, 0, package_categories.ids)],
             })
 
             rec.product_id = product.product_variant_id.id
@@ -79,6 +86,10 @@ class PackageRule(models.Model):
 
     def action_update_package_product(self):
         for rec in self:
+            if rec.is_locked:
+                raise ValidationError(
+                    _("This package has already been sold/used and cannot update the POS product.")
+                )
 
             if rec.product_id:
                 rec.product_id.write({
@@ -105,6 +116,8 @@ class PackageRule(models.Model):
             "duration",
             "discount_per",
             "detail_ids",
+            "extra_discount_per",
+            "pos_config_ids",
         ]
 
         for rec in self:

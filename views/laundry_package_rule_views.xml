@@ -79,6 +79,10 @@
 
             <field name="valid"
                    readonly="is_locked"/>
+            <field name="pos_config_ids"
+                widget="many2many_tags"
+                domain="[('enable_laundry_packages', '=', True)]"
+                options="{'no_create': True, 'no_open': True}"/>
 
         </group>
 
@@ -92,6 +96,7 @@
 
             <field name="product_id"
                    readonly="1"/>
+            
 
         </group>
 

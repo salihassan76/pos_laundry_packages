@@ -90,7 +90,9 @@ laundryService.start = function (env, deps) {
         if (!partnerId) {
             return [];
         }
-        return await this.orm.call("partner.package", "get_active_packages_for_pos", [partnerId]);
+        
+
+        return await this.orm.call("partner.package", "get_active_packages_for_pos", [partnerId,this.pos.config.id,]);
     };
 
     service.getPackageUsageOrderType = async function () {

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <record id="view_pos_config_form_laundry_packages_inherit" model="ir.ui.view">
+        <field name="name">pos.config.form.laundry.packages.inherit</field>
+        <field name="model">pos.config</field>
+        <field name="inherit_id" ref="pos_laundry.view_pos_config_form_laundry_only"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//notebook" position="inside">
+                <page name="packages" string="Packages">
+                    <group>
+                        <field name="enable_laundry_packages"/>
+
+                        <field name="package_pos_category_id"
+                               invisible="not enable_laundry_packages"/>
+
+                        <field name="package_payment_id"
+                               invisible="not enable_laundry_packages"/>
+                    </group>
+                </page>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

@@ -16,12 +16,18 @@ class PosConfig(models.Model):
         readonly=False,
     )
 
+    enable_laundry_packages = fields.Boolean(
+        string="Enable Packages",
+        default=True,
+    )
+
     def _load_pos_data_read(self, records, config):
         data = super()._load_pos_data_read(records, config)
 
         package_fields = [
             "package_pos_category_id",
             "package_payment_id",
+            "enable_laundry_packages",
         ]
 
         for record in data:

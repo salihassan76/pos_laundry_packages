@@ -23,7 +23,7 @@ Adds package functionality on top of POS Laundry:
     "license": "LGPL-3",
     "data": [
         "security/ir.model.access.csv",
-        "views/laundry_configuration_views.xml",
+        "views/pos_config_views.xml",
         "views/laundry_order_type_views.xml",
         "views/laundry_package_rule_views.xml",
         "views/laundry_package_rule_action.xml",

@@ -93,11 +93,20 @@ class PartnerPackage(models.Model):
                 rec.state = "active"
     
     @api.model
-    def get_active_packages_for_pos(self, partner_id):
-        packages = self.search([
+    def get_active_packages_for_pos(self, partner_id, pos_config_id=False):
+        domain = [
             ("partner_id", "=", partner_id),
             ("state", "=", "active"),
-        ])
+        ]
+
+        if pos_config_id:
+            domain += [
+                "|",
+                ("package_rule_id.pos_config_ids", "=", False),
+                ("package_rule_id.pos_config_ids", "in", [pos_config_id]),
+            ]
+
+        packages = self.search(domain)
 
         result = []
 
@@ -122,14 +131,13 @@ class PartnerPackage(models.Model):
                 used_qty = sum(usage_lines.mapped("qty"))
                 remaining_qty = detail.qty - used_qty
 
-
                 details.append({
                     "category_id": category.id if category else False,
                     "category_name": category.name if category else "",
                     "product_ids": product_ids,
                     "allowed_qty": detail.qty,
                     "used_qty": used_qty,
-                    "remaining_qty": remaining_qty if remaining_qty > 0 else 0,
+                    "remaining_qty": max(remaining_qty, 0),
                 })
 
             result.append({

@@ -7,16 +7,11 @@
         <field name="inherit_id" ref="pos_laundry.view_laundry_configuration_form"/>
         <field name="arch" type="xml">
 
-            <xpath expr="//field[@name='direct_print']" position="before">
-                <field name="package_pos_category_id"/>
-            </xpath>
-
-            <xpath expr="//field[@name='paid_payment_id']" position="after">
-                <field name="package_payment_id"/>
-            </xpath>
+            <xpath expr="//field[@name='show_receipt_preview']" position="after">
+    <field name="enable_laundry_packages"/>
+</xpath>
 
         </field>
-    </record>    
+    </record>
+
 </odoo>
-
-
