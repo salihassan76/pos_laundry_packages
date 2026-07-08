@@ -5,15 +5,15 @@ class PosConfig(models.Model):
     _inherit = "pos.config"
 
     package_pos_category_id = fields.Many2one(
-        related="laundry_configuration_id.package_pos_category_id",
-        readonly=False,
+        "pos.category",
         string="Package POS Category",
+        readonly=False,
     )
 
     package_payment_id = fields.Many2one(
-        related="laundry_configuration_id.package_payment_id",
-        readonly=False,
+        "laundry.order.payment.status",
         string="Package Payment Status",
+        readonly=False,
     )
 
     def _load_pos_data_read(self, records, config):

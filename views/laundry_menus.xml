@@ -4,7 +4,7 @@
     <!-- Packages -->
     <menuitem id="menu_laundry_packages"
               name="Packages"
-              parent="menu_laundry_root"
+              parent="pos_laundry.menu_laundry_root"
               sequence="20"/>
 
     <menuitem id="menu_laundry_package_rule"
