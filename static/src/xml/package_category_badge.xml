@@ -6,12 +6,28 @@
        t-inherit-mode="extension">
 
         <xpath expr="//button[hasclass('category-button')]" position="inside">
-            <t t-if="this.getPackageCategoryBadge and category">
-                <span t-if="this.getPackageCategoryBadge(category.id)"
-                      class="badge rounded-pill text-bg-info ms-1 package-category-badge">
-                    <t t-esc="this.getPackageCategoryBadge(category.id)"/>
-                </span>
+
+            <t t-if="category">
+
+                <t t-set="badge"
+                   t-value="this.getPackageCategoryBadge(category.id)"/>
+
+                <t t-if="badge">
+
+                    <span
+                        t-att-class="'badge rounded-pill ms-1 package-category-badge ' +
+                            (this.isPackageCategoryDisabled(category.id)
+                                ? 'text-bg-danger'
+                                : 'text-bg-info')">
+
+                        <t t-esc="badge"/>
+
+                    </span>
+
+                </t>
+
             </t>
+
         </xpath>
 
     </t>

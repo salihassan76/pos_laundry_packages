@@ -2,6 +2,7 @@
 
 import { patch } from "@web/core/utils/patch";
 import { CategorySelector } from "@point_of_sale/app/components/category_selector/category_selector";
+import { ProductScreen } from "@point_of_sale/app/screens/product_screen/product_screen";
 
 console.log("Laundry package category patch loaded");
 
@@ -78,5 +79,37 @@ patch(CategorySelector.prototype, {
 
     isPackageCategoryDisabled(categoryId) {
         return this.pos.isPackageCategoryExhausted?.(categoryId) || false;
+    },
+});
+
+patch(ProductScreen.prototype, {
+    setup() {
+        super.setup(...arguments);
+
+        setTimeout(() => {
+            const order = this.pos.getOrder?.() || this.pos.get_order?.();
+
+            if (!order?.uiState?.is_package_usage) {
+                return;
+            }
+
+            const startCategoryId = order.uiState.laundry_start_category_id;
+
+            if (!startCategoryId) {
+                return;
+            }
+
+            if (order.uiState.laundry_start_category_opened) {
+                return;
+            }
+
+            order.uiState.laundry_start_category_opened = true;
+
+            this.pos.selectedCategoryId = startCategoryId;
+            this.pos.selected_category_id = startCategoryId;
+            this.pos.productListCategoryId = startCategoryId;
+
+            this.render?.();
+        }, 0);
     },
 });

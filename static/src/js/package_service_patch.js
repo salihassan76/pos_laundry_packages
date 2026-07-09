@@ -83,6 +83,11 @@ laundryService.start = function (env, deps) {
                 values.allowed_package_products || values.allowed_product_ids || [];
         }
 
+        if ("laundry_start_category_id" in values) {
+            order.uiState.laundry_start_category_id =
+                values.laundry_start_category_id || false;
+        }
+
         if (
             "laundry_allowed_pos_category_ids" in values ||
             "allowed_category_ids" in values ||
@@ -184,6 +189,10 @@ laundryService.start = function (env, deps) {
             laundry_allowed_pos_category_ids: allowedCategories.length
             ? allowedCategories
             : this._normalizeCategoryIds(orderType.pos_category_ids || []),
+
+            laundry_start_category_id: allowedCategories.length
+            ? allowedCategories[0]
+            : this._normalizeCategoryIds(orderType.pos_category_ids || [])[0] || false,
             is_package_sale: false,
             is_package_usage: true,
             partner_package_id: pkg.id,
@@ -228,6 +237,7 @@ laundryService.start = function (env, deps) {
         values.laundry_allowed_pos_category_ids =
         order.uiState.laundry_allowed_pos_category_ids || [];
         values.package_details = order.uiState.package_details || [];
+        values.laundry_start_category_id =order.uiState.laundry_start_category_id || false;
         return values;
     };
 
@@ -246,6 +256,12 @@ laundryService.start = function (env, deps) {
             data.allowed_package_categories ||
             [];
         values.package_details = data.package_details || [];
+        values.laundry_start_category_id =
+        data.laundry_start_category_id ||
+        data.laundry_allowed_pos_category_ids?.[0] ||
+        data.allowed_category_ids?.[0] ||
+        false;
+
         return values;
     };
 

@@ -104,7 +104,28 @@ patch(PosStore.prototype, {
             return "";
         }
 
-        return getPackageCategoryBadge(order, categoryId);
+        const directBadge = getPackageCategoryBadge(order, categoryId);
+        if (directBadge !== "") {
+            return directBadge;
+        }
+
+        const childIds = this.getPackageChildCategoryIds(categoryId);
+        if (!childIds.length) {
+            return "";
+        }
+
+        let total = 0;
+        let found = false;
+
+        for (const childId of childIds) {
+            const badge = getPackageCategoryBadge(order, childId);
+            if (badge !== "") {
+                total += Number(badge || 0);
+                found = true;
+            }
+        }
+
+        return found ? `${total}` : "";
     },
 
     isPackageCategoryExhausted(categoryId) {
@@ -114,6 +135,58 @@ patch(PosStore.prototype, {
             return false;
         }
 
-        return isPackageCategoryExhausted(order, categoryId);
+        const directBadge = getPackageCategoryBadge(order, categoryId);
+        if (directBadge !== "") {
+            return isPackageCategoryExhausted(order, categoryId);
+        }
+
+        const childIds = this.getPackageChildCategoryIds(categoryId);
+        if (!childIds.length) {
+            return false;
+        }
+
+        const childBadges = childIds
+            .map((childId) => getPackageCategoryBadge(order, childId))
+            .filter((badge) => badge !== "");
+
+        if (!childBadges.length) {
+            return false;
+        }
+
+        return childBadges.every((badge) => Number(badge || 0) <= 0);
     },
+    getPackageChildCategoryIds(categoryId) {
+        const categories =
+            this.models?.["pos.category"] ||
+            this.data?.models?.["pos.category"];
+
+        if (!categories) {
+            return [];
+        }
+
+        const records =
+            categories.getAll?.() ||
+            Array.from(categories.values?.() || []);
+
+        const childIds = [];
+
+        const collectChildren = (parentId) => {
+            for (const category of records) {
+                const parent =
+                    category.parent_id?.id ||
+                    category.parent_id?.[0] ||
+                    category.parent_id ||
+                    false;
+
+                if (parent === parentId) {
+                    childIds.push(category.id);
+                    collectChildren(category.id);
+                }
+            }
+        };
+
+        collectChildren(categoryId);
+        return childIds;
+    },
+
 });
