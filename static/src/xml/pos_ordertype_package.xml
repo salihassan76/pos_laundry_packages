@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
 
     <t t-name="pos_laundry_packages.OrderSummaryPackageExtension"
-       t-inherit="pos_laundry.OrderSummaryExtension"
+       t-inherit="point_of_sale.OrderSummary"
        t-inherit-mode="extension">
 
         <xpath expr="//div[contains(@class, 'laundry-order-info')]/div" position="inside">
