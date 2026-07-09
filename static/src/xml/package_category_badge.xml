@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="pos_laundry_packages.CategorySelectorPackageBadge"
+       t-inherit="point_of_sale.CategorySelector"
+       t-inherit-mode="extension">
+
+        <xpath expr="//button[hasclass('category-button')]" position="inside">
+            <t t-if="this.getPackageCategoryBadge and category">
+                <span t-if="this.getPackageCategoryBadge(category.id)"
+                      class="badge rounded-pill text-bg-info ms-1 package-category-badge">
+                    <t t-esc="this.getPackageCategoryBadge(category.id)"/>
+                </span>
+            </t>
+        </xpath>
+
+    </t>
+
+</templates>

@@ -20,9 +20,10 @@
                                         <h6 class="mb-1">
                                             <i class="fa fa-gift me-2"/>
                                             <t t-esc="pkg.package_rule_id?.[1] || pkg.package_rule_name"/>
+                                            - <t t-esc="pkg.laundry_order_id"/>
                                         </h6>
                                         <div class="small text-muted">
-                                            Valid Until: <t t-esc="pkg.end_date"/>
+                                            Start date: <t t-esc="pkg.start_date"/>
                                         </div>
                                     </div>
                                     <div class="text-end">

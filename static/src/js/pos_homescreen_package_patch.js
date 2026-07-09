@@ -12,6 +12,7 @@ patch(PosHomeScreen.prototype, {
     },
 
     async selectPackage(pkg) {
+        console.log("selectPackage called with pkg:", pkg);
         await this.laundry.selectPackage(pkg, this.state.customer);
     },
 });

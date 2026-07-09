@@ -258,44 +258,30 @@ class LaundryOrder(models.Model):
         })
         return receipt
 
-    def _extend_laundry_order_for_pos_data(self, data, order):
-        data = super()._extend_laundry_order_for_pos_data(data, order)
-
+    def _get_partner_package_for_order(self, order):
         usage_line = self.env["partner.package.usage.line"].search([
             ("laundry_order_id", "=", order.id),
         ], limit=1)
+        return usage_line.partner_package_id if usage_line else False
 
-        partner_package = usage_line.partner_package_id if usage_line else False
+    def _extend_laundry_order_for_pos_data(self, data, order):
+        data = super()._extend_laundry_order_for_pos_data(data, order)
 
-        allowed_product_ids = []
-        allowed_category_ids = []
-        package_details = []
+        partner_package = self._get_partner_package_for_order(order)
+        payload = {
+            "allowed_product_ids": [],
+            "allowed_category_ids": [],
+            "details": [],
+        }
 
         if partner_package:
-            for detail in partner_package.package_rule_id.detail_ids:
-                product_ids = detail.product_ids.ids
-                category = detail.pos_category_id
+            payload = partner_package._get_pos_package_payload(
+                exclude_laundry_order_id=order.id
+            )
 
-                allowed_product_ids.extend(product_ids)
-
-                if category:
-                    allowed_category_ids.append(category.id)
-
-                usage_lines = partner_package.usage_history_ids.filtered(
-                    lambda line: line.package_rule_detail_id.id == detail.id
-                )
-
-                used_qty = sum(usage_lines.mapped("qty"))
-                remaining_qty = detail.qty - used_qty
-
-                package_details.append({
-                    "category_id": category.id if category else False,
-                    "category_name": category.name if category else "",
-                    "product_ids": product_ids,
-                    "allowed_qty": detail.qty,
-                    "used_qty": used_qty,
-                    "remaining_qty": max(remaining_qty, 0),
-                })
+        allowed_product_ids = payload["allowed_product_ids"]
+        allowed_category_ids = payload["allowed_category_ids"]
+        package_details = payload["details"]
 
         data.update({
             "is_package": bool(order.is_package),
@@ -306,9 +292,16 @@ class LaundryOrder(models.Model):
             "package_rule_name": order.package_rule_id.name if order.package_rule_id else "",
             "partner_package_id": partner_package.id if partner_package else False,
 
-            "allowed_package_products": list(set(allowed_product_ids)),
-            "laundry_allowed_pos_category_ids": list(set(allowed_category_ids)),
+            # canonical POS package state
+            "allowed_package_products": allowed_product_ids,
+            "laundry_allowed_pos_category_ids": allowed_category_ids,
             "package_details": package_details,
+
+            # compatibility aliases
+            "allowed_product_ids": allowed_product_ids,
+            "allowed_category_ids": allowed_category_ids,
+            "allowed_package_categories": allowed_category_ids,
+            "details": package_details,
         })
 
         return data

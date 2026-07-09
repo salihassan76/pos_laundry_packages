@@ -19,7 +19,7 @@ function getPackageRuleName(pkg) {
 }
 
 function normalizePackageDetails(pkg) {
-    return pkg.details || pkg.package_details || [];
+    return pkg.package_details || pkg.details || [];
 }
 
 function getAllowedPackageProducts(pkg) {
@@ -78,8 +78,9 @@ laundryService.start = function (env, deps) {
             order.uiState.package_rule_name = values.package_rule_name || "";
         }
 
-        if ("allowed_package_products" in values) {
-            order.uiState.allowed_package_products = values.allowed_package_products || [];
+        if ("allowed_package_products" in values || "allowed_product_ids" in values) {
+            order.uiState.allowed_package_products =
+                values.allowed_package_products || values.allowed_product_ids || [];
         }
 
         if (
@@ -94,8 +95,8 @@ laundryService.start = function (env, deps) {
                 [];
         }
 
-        if ("package_details" in values) {
-            order.uiState.package_details = values.package_details || [];
+        if ("package_details" in values || "details" in values) {
+            order.uiState.package_details = values.package_details || values.details || [];
         }
     };
 
@@ -152,12 +153,25 @@ laundryService.start = function (env, deps) {
 
         let order = this.getOrder();
 
-        if (!order) {
+        // Starting from an active package should never overwrite an existing
+        // laundry order already opened in the POS. Reuse only an empty unsaved
+        // frontend order; otherwise create a fresh POS cart.
+        const hasExistingLaundryOrder = Boolean(order?.uiState?.laundry_order_id);
+        console.log("hasExistingLaundryOrder:", hasExistingLaundryOrder);
+        const hasLines = (order?.lines || order?.orderlines || []).length > 0;
+
+        if (!order || hasExistingLaundryOrder || hasLines) {
             order = await this.createFreshOrder(customer);
         }
+        console.log("Final order:", order);
 
         if (!order) {
             return;
+        }
+
+        if (customer) {
+            order.setPartner?.(customer);
+            order.set_partner?.(customer);
         }
 
         const allowedProducts = getAllowedPackageProducts(pkg);
@@ -178,7 +192,6 @@ laundryService.start = function (env, deps) {
             allowed_package_products: allowedProducts,
             package_details: normalizePackageDetails(pkg),
         });
-        
 
         this.pos.selected_laundry_order_type = orderType;
         this.pos.selected_partner_package = pkg;
