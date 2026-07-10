@@ -4,81 +4,34 @@ import { patch } from "@web/core/utils/patch";
 import { CategorySelector } from "@point_of_sale/app/components/category_selector/category_selector";
 import { ProductScreen } from "@point_of_sale/app/screens/product_screen/product_screen";
 
-console.log("Laundry package category patch loaded");
+console.log("Laundry package category features loaded");
+
+function getCurrentOrder(pos) {
+    return (
+        pos.getOrder?.() ||
+        pos.get_order?.() ||
+        null
+    );
+}
 
 patch(CategorySelector.prototype, {
-    getCategoriesAndSub() {
-        const categories = super.getCategoriesAndSub(...arguments);
-        return this._filterCategoriesWithVisibleProducts(categories);
-    },
-
-    getLaundryCategoriesAndSub() {
-        const categories = super.getCategoriesAndSub(...arguments);
-        return this._filterCategoriesWithVisibleProducts(categories);
-    },
-
-    _filterCategoriesWithVisibleProducts(categories) {
-        const order = this.pos.getOrder?.() || this.pos.get_order?.();
-
-        const orderTypeAllowedCategories =
-            order?.uiState?.laundry_allowed_pos_category_ids || [];
-
-        const packageAllowedProducts =
-            order?.uiState?.allowed_package_products || [];
-
-        const isPackageUsage =
-            order?.uiState?.is_package_usage || false;
-
-        if (!isPackageUsage && !orderTypeAllowedCategories.length) {
-            return categories;
-        }
-
-        const realCategories = this.pos.models["pos.category"];
-
-        return categories.filter((category) => {
-            const categoryId = category?.id;
-
-            if (!categoryId) {
-                return false;
-            }
-
-            const realCategory =
-                realCategories.get?.(categoryId) ||
-                realCategories.getAll?.().find((c) => c.id === categoryId);
-
-            if (!realCategory) {
-                return false;
-            }
-
-            const products = realCategory.associatedProducts || [];
-
-            const visibleProducts = products.filter((product) => {
-                const productCatIds =
-                    product.pos_categ_ids?.map((c) => c.id || c) || [];
-
-                if (isPackageUsage && packageAllowedProducts.length) {
-                    return packageAllowedProducts.includes(product.id);
-                }
-
-                if (orderTypeAllowedCategories.length) {
-                    return productCatIds.some((id) =>
-                        orderTypeAllowedCategories.includes(id)
-                    );
-                }
-
-                return true;
-            });
-
-            return visibleProducts.length > 0;
-        });
-    },
-
+    /*
+     * Package addon only supplies badge information.
+     * It does not filter the category list.
+     */
     getPackageCategoryBadge(categoryId) {
-        return this.pos.getPackageCategoryBadge?.(categoryId) || "";
+        return (
+            this.pos.getPackageCategoryBadge?.(categoryId) ||
+            ""
+        );
     },
 
     isPackageCategoryDisabled(categoryId) {
-        return this.pos.isPackageCategoryExhausted?.(categoryId) || false;
+        return Boolean(
+            this.pos.isPackageCategoryExhausted?.(
+                categoryId
+            )
+        );
     },
 });
 
@@ -87,27 +40,39 @@ patch(ProductScreen.prototype, {
         super.setup(...arguments);
 
         setTimeout(() => {
-            const order = this.pos.getOrder?.() || this.pos.get_order?.();
+            const order = getCurrentOrder(this.pos);
 
             if (!order?.uiState?.is_package_usage) {
                 return;
             }
 
-            const startCategoryId = order.uiState.laundry_start_category_id;
+            const startCategoryId = Number(
+                order.uiState
+                    ?.laundry_start_category_id
+            );
 
             if (!startCategoryId) {
                 return;
             }
 
-            if (order.uiState.laundry_start_category_opened) {
+            if (
+                order.uiState
+                    ?.laundry_start_category_opened
+            ) {
                 return;
             }
 
-            order.uiState.laundry_start_category_opened = true;
+            order.uiState
+                .laundry_start_category_opened = true;
 
-            this.pos.selectedCategoryId = startCategoryId;
-            this.pos.selected_category_id = startCategoryId;
-            this.pos.productListCategoryId = startCategoryId;
+            this.pos.selectedCategoryId =
+                startCategoryId;
+
+            this.pos.selected_category_id =
+                startCategoryId;
+
+            this.pos.productListCategoryId =
+                startCategoryId;
 
             this.render?.();
         }, 0);

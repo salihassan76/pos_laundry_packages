@@ -4,67 +4,79 @@ import { patch } from "@web/core/utils/patch";
 import { PosStore } from "@point_of_sale/app/services/pos_store";
 import { getLiveAllowedProductIds } from "./package_engine";
 
-console.log("Laundry package product patch loaded");
+console.log("Laundry package product filter loaded");
+
+function normalizeIds(values = []) {
+    return [...new Set(
+        (values || [])
+            .map((value) => {
+                if (typeof value === "number") {
+                    return value;
+                }
+
+                if (typeof value === "string") {
+                    return Number(value);
+                }
+
+                if (Array.isArray(value)) {
+                    return Number(value[0]);
+                }
+
+                return Number(value?.id);
+            })
+            .filter((value) =>
+                Number.isInteger(value) && value > 0
+            )
+    )];
+}
 
 patch(PosStore.prototype, {
     get productToDisplayByCateg() {
+        /*
+         * This is already filtered by the core laundry module.
+         */
         const result = super.productToDisplayByCateg;
-        const order = this.getOrder?.() || this.get_order?.();
 
-        const isPackageUsage =
-            order?.uiState?.is_package_usage || order?.is_package_usage || false;
+        const order =
+            this.getOrder?.() ||
+            this.get_order?.() ||
+            null;
 
-        const orderTypeAllowedCategories =
-            order?.uiState?.laundry_allowed_pos_category_ids || [];
+        if (!order?.uiState?.is_package_usage) {
+            return result;
+        }
 
-        const selectedCategory = this.selectedCategory;
-        const selectedCategoryIds = selectedCategory
-            ? selectedCategory.getAllChildren().map((cat) => cat.id)
-            : [];
+        const liveAllowedIds = normalizeIds(
+            getLiveAllowedProductIds(order) || []
+        );
+
+        const storedAllowedIds = normalizeIds(
+            order.uiState?.allowed_package_products ||
+            order.allowed_package_products ||
+            []
+        );
+
+        const allowedProductIds = new Set(
+            liveAllowedIds.length
+                ? liveAllowedIds
+                : storedAllowedIds
+        );
+
+        if (!allowedProductIds.size) {
+            return [];
+        }
 
         return result
-            .map(([category, products]) => {
-                const filteredProducts = products.filter((product) => {
-                    const productCatIds =
-                        product.pos_categ_ids?.map((c) => c.id || c) || [];
-
-                    const allowedBySelectedCategory =
-                        !selectedCategoryIds.length ||
-                        productCatIds.some((id) =>
-                            selectedCategoryIds.includes(id)
-                        );
-
-                    if (!allowedBySelectedCategory) {
-                        return false;
-                    }
-
-                    if (isPackageUsage) {
-                        const liveAllowedProductIds =
-                            getLiveAllowedProductIds(order) || [];
-
-                        const fallbackAllowedProductIds =
-                            order?.uiState?.allowed_package_products ||
-                            order?.allowed_package_products ||
-                            [];
-
-                        const allowedProductIds = liveAllowedProductIds.length
-                            ? liveAllowedProductIds
-                            : fallbackAllowedProductIds;
-
-                        return allowedProductIds.includes(product.id);
-                    }
-
-                    if (orderTypeAllowedCategories.length) {
-                        return productCatIds.some((id) =>
-                            orderTypeAllowedCategories.includes(id)
-                        );
-                    }
-
-                    return true;
-                });
-
-                return [category, filteredProducts];
-            })
-            .filter(([category, products]) => products.length > 0);
+            .map(([category, products]) => [
+                category,
+                products.filter((product) =>
+                    allowedProductIds.has(
+                        Number(product.id)
+                    )
+                ),
+            ])
+            .filter(([, products]) =>
+                products.length > 0
+            );
     },
 });

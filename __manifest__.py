@@ -35,7 +35,6 @@ Adds package functionality on top of POS Laundry:
             "pos_laundry_packages/static/src/js/package_store_patch.js",
             "pos_laundry_packages/static/src/js/package_category_patch.js",
             "pos_laundry_packages/static/src/js/package_order_patch.js",
-            "pos_laundry_packages/static/src/js/package_product_patch.js",
             "pos_laundry_packages/static/src/js/package_service_patch.js",
             "pos_laundry_packages/static/src/js/package_utils.js",
             "pos_laundry_packages/static/src/js/package_validation.js",

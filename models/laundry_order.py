@@ -1,6 +1,9 @@
+import logging
 from odoo import fields, models, _
 from odoo.exceptions import ValidationError
 
+
+_logger = logging.getLogger(__name__)
 
 class LaundryOrder(models.Model):
     _inherit = "laundry.order"
@@ -268,6 +271,8 @@ class LaundryOrder(models.Model):
         data = super()._extend_laundry_order_for_pos_data(data, order)
 
         partner_package = self._get_partner_package_for_order(order)
+        core_allowed_category_ids = list(data.get("allowed_category_ids") or [])
+
         payload = {
             "allowed_product_ids": [],
             "allowed_category_ids": [],
@@ -280,28 +285,49 @@ class LaundryOrder(models.Model):
             )
 
         allowed_product_ids = payload["allowed_product_ids"]
-        allowed_category_ids = payload["allowed_category_ids"]
+        package_allowed_category_ids = payload["allowed_category_ids"]
         package_details = payload["details"]
+        is_package_usage = bool(order.is_package and partner_package)
+
+        # Normal orders must keep the order type categories returned by the core module.
+        # Package usage orders use the package payload categories.
+        effective_allowed_category_ids = (
+            package_allowed_category_ids
+            if is_package_usage
+            else core_allowed_category_ids
+        )
 
         data.update({
             "is_package": bool(order.is_package),
-            "is_package_usage": bool(order.is_package),
+            "is_package_usage": is_package_usage,
             "is_package_sale": bool(order.order_type_id.is_package_sale),
             "is_package_use": bool(order.order_type_id.is_package_use),
             "package_rule_id": order.package_rule_id.id if order.package_rule_id else False,
             "package_rule_name": order.package_rule_id.name if order.package_rule_id else "",
             "partner_package_id": partner_package.id if partner_package else False,
 
-            # canonical POS package state
+            # Canonical frontend state.
             "allowed_package_products": allowed_product_ids,
-            "laundry_allowed_pos_category_ids": allowed_category_ids,
+            "laundry_allowed_pos_category_ids": effective_allowed_category_ids,
             "package_details": package_details,
 
-            # compatibility aliases
+            # Compatibility aliases. Never overwrite normal-order categories with [].
             "allowed_product_ids": allowed_product_ids,
-            "allowed_category_ids": allowed_category_ids,
-            "allowed_package_categories": allowed_category_ids,
+            "allowed_category_ids": effective_allowed_category_ids,
+            "allowed_package_categories": package_allowed_category_ids,
             "details": package_details,
         })
+
+        _logger.info(
+            "POS open order payload (package extension): order_id=%s is_package_usage=%s "
+            "core_categories=%s package_categories=%s effective_categories=%s "
+            "allowed_products=%s",
+            order.id,
+            is_package_usage,
+            core_allowed_category_ids,
+            package_allowed_category_ids,
+            effective_allowed_category_ids,
+            allowed_product_ids,
+        )
 
         return data

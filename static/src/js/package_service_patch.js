@@ -3,6 +3,7 @@
 import { _t } from "@web/core/l10n/translation";
 import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { laundryService } from "@pos_laundry/app/services/laundry_service";
+import { laundryLog, traceLaundryState } from "@pos_laundry/app/utils/laundry_visibility";
 
 const originalStart = laundryService.start;
 
@@ -162,13 +163,18 @@ laundryService.start = function (env, deps) {
         // laundry order already opened in the POS. Reuse only an empty unsaved
         // frontend order; otherwise create a fresh POS cart.
         const hasExistingLaundryOrder = Boolean(order?.uiState?.laundry_order_id);
-        console.log("hasExistingLaundryOrder:", hasExistingLaundryOrder);
+        laundryLog("PackageSelect", "current order decision", {
+            currentOrderUuid: order?.uuid || false,
+            hasExistingLaundryOrder,
+        });
         const hasLines = (order?.lines || order?.orderlines || []).length > 0;
 
         if (!order || hasExistingLaundryOrder || hasLines) {
             order = await this.createFreshOrder(customer);
         }
-        console.log("Final order:", order);
+        laundryLog("PackageSelect", "target order selected", {
+            orderUuid: order?.uuid || false,
+        });
 
         if (!order) {
             return;
@@ -204,6 +210,12 @@ laundryService.start = function (env, deps) {
 
         this.pos.selected_laundry_order_type = orderType;
         this.pos.selected_partner_package = pkg;
+        traceLaundryState("PackageSelect:BeforeProductScreen", this.pos, {
+            packageId: pkg.id,
+            packageRuleId: getPackageRuleId(pkg),
+            allowedProducts,
+            allowedCategories,
+        });
         this.pos.navigate("ProductScreen", { orderUuid: order.uuid });
     };
 
