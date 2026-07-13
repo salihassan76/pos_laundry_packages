@@ -68,14 +68,45 @@ class LaundryOrder(models.Model):
 
         return vals
 
-    def _prepare_laundry_order_update_vals(self, data, pos_config, context):
-        vals = super()._prepare_laundry_order_update_vals(data, pos_config, context)
+    def _prepare_laundry_order_update_vals(
+    self,
+    data,
+    pos_config,
+    context,
+    ):
+        vals = super()._prepare_laundry_order_update_vals(
+            data,
+            pos_config,
+            context,
+        )
+
         package_rule = context.get("package_rule")
+        is_package_usage = bool(
+            data.get("is_package_usage")
+        )
 
         vals.update({
-            "package_rule_id": package_rule.id if package_rule else False,
-            "is_package": bool(data.get("is_package_usage")),
+            "package_rule_id": (
+                package_rule.id
+                if package_rule
+                else False
+            ),
+            "is_package": is_package_usage,
         })
+
+        if is_package_usage:
+            if not pos_config.package_payment_id:
+                raise ValidationError(
+                    _(
+                        "Please configure "
+                        "Package Payment Status."
+                    )
+                )
+
+            vals["payment_status_id"] = (
+                pos_config.package_payment_id.id
+            )
+
         return vals
 
     def _after_create_laundry_order_from_pos(self, laundry_order, data, pos_config, context):
@@ -172,61 +203,215 @@ class LaundryOrder(models.Model):
         ]).unlink()
         self._create_package_usage_lines(data, laundry_order)
 
-    def _create_package_usage_lines(self, data, laundry_order):
+    def _create_package_usage_lines(
+    self,
+    data,
+    laundry_order,
+    ):
         if not data.get("is_package_usage"):
             return
 
-        partner_package_id = data.get("partner_package_id")
+        partner_package_id = data.get(
+            "partner_package_id"
+        )
+
         if not partner_package_id:
-            raise ValidationError(_("Please select an active customer package."))
+            raise ValidationError(
+                _(
+                    "Please select an active "
+                    "customer package."
+                )
+            )
 
-        partner_package = self.env["partner.package"].browse(partner_package_id)
+        partner_package = self.env[
+            "partner.package"
+        ].browse(partner_package_id)
+
         if not partner_package.exists():
-            raise ValidationError(_("Selected customer package was not found."))
+            raise ValidationError(
+                _(
+                    "Selected customer package "
+                    "was not found."
+                )
+            )
 
-        if partner_package.partner_id.id != data.get("partner_id"):
-            raise ValidationError(_("Selected package does not belong to this customer."))
+        if (
+            partner_package.partner_id.id
+            != data.get("partner_id")
+        ):
+            raise ValidationError(
+                _(
+                    "Selected package does not "
+                    "belong to this customer."
+                )
+            )
 
         if partner_package.state != "active":
-            raise ValidationError(_("Selected package is not active."))
+            raise ValidationError(
+                _(
+                    "Selected package is not active."
+                )
+            )
 
-        UsageLine = self.env["partner.package.usage.line"]
+        UsageLine = self.env[
+            "partner.package.usage.line"
+        ]
 
-        for line in data.get("lines", []):
+        requested_lines = []
+        requested_by_detail = {}
+
+        # First collect and aggregate all requested quantities.
+        for line in data.get("lines") or []:
             product_id = line.get("product_id")
+
             if not product_id:
                 continue
 
-            qty = line.get("qty") or 1.0
-            detail = self._get_package_detail_for_product(partner_package, product_id)
+            qty = float(line.get("qty") or 0.0)
 
-            if not detail:
-                product = self.env["product.product"].browse(product_id)
-                raise ValidationError(
-                    _("Product %s is not included in this package.") % product.display_name
+            if qty <= 0:
+                continue
+
+            detail = (
+                self._get_package_detail_for_product(
+                    partner_package,
+                    product_id,
                 )
-
-            used_qty = sum(
-                UsageLine.search([
-                    ("partner_package_id", "=", partner_package.id),
-                    ("package_rule_detail_id", "=", detail.id),
-                ]).mapped("qty")
             )
 
-            remaining_qty = detail.qty - used_qty
-            if qty > remaining_qty:
+            if not detail:
+                product = self.env[
+                    "product.product"
+                ].browse(product_id)
+
                 raise ValidationError(
-                    _("Not enough package balance for %s. Remaining: %s, Requested: %s.")
-                    % (detail.pos_category_id.name, remaining_qty, qty)
+                    _(
+                        "Product %s is not included "
+                        "in this package."
+                    )
+                    % product.display_name
                 )
 
-            UsageLine.create({
-                "partner_package_id": partner_package.id,
-                "package_rule_detail_id": detail.id,
-                "laundry_order_id": laundry_order.id,
+            requested_lines.append({
                 "product_id": product_id,
                 "qty": qty,
+                "detail": detail,
             })
+
+            requested_by_detail.setdefault(
+                detail.id,
+                {
+                    "detail": detail,
+                    "requested_qty": 0.0,
+                },
+            )
+
+            requested_by_detail[
+                detail.id
+            ]["requested_qty"] += qty
+
+        if not requested_lines:
+            raise ValidationError(
+                _(
+                    "Please add at least one valid "
+                    "package product."
+                )
+            )
+
+        # Read existing usage once.
+        existing_usage = UsageLine.read_group(
+            domain=[
+                (
+                    "partner_package_id",
+                    "=",
+                    partner_package.id,
+                ),
+            ],
+            fields=[
+                "qty:sum",
+                "package_rule_detail_id",
+            ],
+            groupby=[
+                "package_rule_detail_id",
+            ],
+        )
+
+        used_by_detail = {}
+
+        for group in existing_usage:
+            detail_value = group.get(
+                "package_rule_detail_id"
+            )
+
+            if not detail_value:
+                continue
+
+            detail_id = detail_value[0]
+
+            used_by_detail[detail_id] = (
+                group.get("qty", 0.0)
+                or group.get("qty_sum", 0.0)
+                or 0.0
+            )
+
+        # Validate the complete request before creating anything.
+        for detail_id, values in (
+            requested_by_detail.items()
+        ):
+            detail = values["detail"]
+            requested_qty = values[
+                "requested_qty"
+            ]
+            used_qty = used_by_detail.get(
+                detail_id,
+                0.0,
+            )
+
+            remaining_qty = (
+                detail.qty - used_qty
+            )
+
+            if requested_qty > remaining_qty:
+                category_name = (
+                    detail.pos_category_id.name
+                    if detail.pos_category_id
+                    else detail.display_name
+                )
+
+                raise ValidationError(
+                    _(
+                        "Not enough package balance "
+                        "for %(category)s. "
+                        "Remaining: %(remaining)s, "
+                        "Requested: %(requested)s."
+                    )
+                    % {
+                        "category": category_name,
+                        "remaining": remaining_qty,
+                        "requested": requested_qty,
+                    }
+                )
+
+        # Create only after all validations pass.
+        usage_values = []
+
+        for requested_line in requested_lines:
+            detail = requested_line["detail"]
+
+            usage_values.append({
+                "partner_package_id":
+                    partner_package.id,
+                "package_rule_detail_id":
+                    detail.id,
+                "laundry_order_id":
+                    laundry_order.id,
+                "product_id":
+                    requested_line["product_id"],
+                "qty":
+                    requested_line["qty"],
+            })
+
+        UsageLine.create(usage_values)
 
     def _validate_package_products(self, partner_package, lines):
         allowed_products = partner_package.package_rule_id.detail_ids.mapped("product_ids").ids
@@ -331,3 +516,45 @@ class LaundryOrder(models.Model):
         )
 
         return data
+    def action_cancel_from_pos(self):
+        self.ensure_one()
+
+        result = super().action_cancel_from_pos()
+
+        if self.is_package:
+            usage_lines = self.env[
+                "partner.package.usage.line"
+            ].search([
+                (
+                    "laundry_order_id",
+                    "=",
+                    self.id,
+                ),
+            ])
+
+            restored_qty = sum(
+                usage_lines.mapped("qty")
+            )
+
+            usage_lines.unlink()
+
+            result.update({
+                "package_usage_released": True,
+                "package_restored_qty": restored_qty,
+            })
+
+        return result
+    
+    def action_refund_from_pos(self):
+        self.ensure_one()
+
+        if self.is_package:
+            raise ValidationError(
+                _(
+                    "Package usage orders cannot "
+                    "be refunded. Cancel the order "
+                    "to restore the package quantity."
+                )
+            )
+
+        return super().action_refund_from_pos()

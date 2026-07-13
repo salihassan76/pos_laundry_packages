@@ -108,9 +108,53 @@ laundryService.start = function (env, deps) {
 
     const originalPrepareOrderTypeState = service._prepareOrderTypeState.bind(service);
     service._prepareOrderTypeState = function (orderType) {
-        const values = originalPrepareOrderTypeState(orderType);
-        values.is_package_sale = Boolean(orderType.is_package_sale);
-        values.is_package_usage = Boolean(orderType.is_package_use);
+        const values =
+            originalPrepareOrderTypeState(orderType);
+
+        const isPackageUsage =
+            Boolean(orderType?.is_package_use);
+
+        const isPackageSale =
+            Boolean(orderType?.is_package_sale);
+
+        values.is_package_sale =
+            isPackageSale;
+
+        values.is_package_usage =
+            isPackageUsage;
+
+        values.laundry_allow_pay =
+            isPackageUsage
+                ? false
+                : Boolean(orderType?.allow_pay);
+
+        values.allow_pay =
+            values.laundry_allow_pay;
+
+        values.laundry_allow_refund =
+            isPackageUsage
+                ? false
+                : Boolean(orderType?.allow_refund);
+
+        values.allow_refund =
+            values.laundry_allow_refund;
+
+        console.log(
+            "[Laundry Packages] Prepared order type state",
+            {
+                orderTypeId:
+                    orderType?.id || false,
+                orderTypeName:
+                    orderType?.name || "",
+                isPackageSale,
+                isPackageUsage,
+                allowPay:
+                    values.laundry_allow_pay,
+                allowRefund:
+                    values.laundry_allow_refund,
+            }
+        );
+
         return values;
     };
 
@@ -199,6 +243,8 @@ laundryService.start = function (env, deps) {
             laundry_start_category_id: allowedCategories.length
             ? allowedCategories[0]
             : this._normalizeCategoryIds(orderType.pos_category_ids || [])[0] || false,
+            laundry_allow_pay : false,
+            laundry_allow_refund : false,
             is_package_sale: false,
             is_package_usage: true,
             partner_package_id: pkg.id,
@@ -250,6 +296,19 @@ laundryService.start = function (env, deps) {
         order.uiState.laundry_allowed_pos_category_ids || [];
         values.package_details = order.uiState.package_details || [];
         values.laundry_start_category_id =order.uiState.laundry_start_category_id || false;
+        values.laundry_allow_pay =
+        values.is_package_usage
+            ? false
+            : result.allow_pay !== undefined
+                ? result.allow_pay !== false
+                : order.uiState.laundry_allow_pay !== false;
+
+        values.laundry_allow_refund =
+            values.is_package_usage
+                ? false
+                : result.allow_refund !== undefined
+                    ? result.allow_refund !== false
+                    : order.uiState.laundry_allow_refund !== false;
         return values;
     };
 
@@ -273,8 +332,34 @@ laundryService.start = function (env, deps) {
         data.laundry_allowed_pos_category_ids?.[0] ||
         data.allowed_category_ids?.[0] ||
         false;
+        values.laundry_allow_pay = values.is_package_usage ? false : data.allow_pay !== false;
+        values.laundry_allow_refund = values.is_package_usage ? false : data.allow_refund !== false;
+        
 
         return values;
+    };
+
+    const originalGetActionPolicy =service.getActionPolicy.bind(service);
+
+    service.getActionPolicy = function (order = this.getOrder()) {
+        const policy =
+            originalGetActionPolicy(order);
+
+        if (!order?.uiState?.is_package_usage) {
+            return policy;
+        }
+
+        return {
+            ...policy,
+
+            // Package usage is already settled
+            // against the customer package.
+            canPayment: false,
+
+            // Cancelling restores package quantity.
+            // Package usage is never financially refunded.
+            canRefund: false,
+        };
     };
 
     return service;
