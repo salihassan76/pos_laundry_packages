@@ -7,8 +7,31 @@ import { laundryLog, traceLaundryState } from "@pos_laundry/app/utils/laundry_vi
 
 const originalStart = laundryService.start;
 
+function normalizeId(value) {
+    if (!value) {
+        return false;
+    }
+
+    if (Array.isArray(value)) {
+        return normalizeId(value[0]);
+    }
+
+    if (typeof value === "object") {
+        return normalizeId(value.id || value.raw?.id || false);
+    }
+
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 ? id : false;
+}
+
 function uniqueIds(ids = []) {
-    return [...new Set((ids || []).filter(Boolean))];
+    return [
+        ...new Set(
+            (Array.isArray(ids) ? ids : [])
+                .map(normalizeId)
+                .filter(Boolean)
+        ),
+    ];
 }
 
 function getPackageRuleId(pkg) {

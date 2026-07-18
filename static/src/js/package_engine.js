@@ -8,10 +8,17 @@ export function toId(value) {
     if (!value) {
         return false;
     }
-    if (typeof value === "object") {
-        return value.id || value[0] || false;
+
+    if (Array.isArray(value)) {
+        return toId(value[0]);
     }
-    return value;
+
+    if (typeof value === "object") {
+        return toId(value.id || value.raw?.id || false);
+    }
+
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 ? id : false;
 }
 
 export function uniqueIds(ids = []) {
